@@ -1,0 +1,71 @@
+<!doctype html>
+<html lang="es">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Cartas de Mercaderistas · Suckot</title>
+  <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'><rect width='32' height='32' rx='7' fill='%23E30613'/><text x='16' y='23' font-size='19' text-anchor='middle' fill='white' font-family='Arial' font-weight='bold'>C</text></svg>">
+  <link rel="stylesheet" href="estilos.css">
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.117.2/dist/umd/supabase.js"></script>
+  <script src="config.js"></script>
+  <script src="logo.js"></script>
+  <script src="plantillas.js"></script>
+  <script src="app.js" defer></script>
+</head>
+<body>
+  <!-- Ingreso -->
+  <section id="login" class="login" hidden>
+    <form id="form-login" class="login-caja" autocomplete="on">
+      <img class="login-logo" alt="Suckot" id="login-logo">
+      <h1>Cartas de Mercaderistas</h1>
+      <p class="sub">Área de Trade · Suckot S.A.C.</p>
+      <label>Correo<input type="email" name="email" required autocomplete="username"></label>
+      <label>Contraseña<input type="password" name="password" required autocomplete="current-password"></label>
+      <p class="error" id="login-error" hidden></p>
+      <button class="btn primario ancho" type="submit">Ingresar</button>
+      <a class="demo-link" href="?demo">Probar en modo demo (datos de ejemplo)</a>
+    </form>
+  </section>
+
+  <!-- Sin permiso -->
+  <section id="noautorizado" class="login" hidden>
+    <div class="login-caja">
+      <h1>Sin acceso</h1>
+      <p>Tu usuario <b id="na-email"></b> todavía no está autorizado. Pide a un administrador que te agregue en <i>Configuración → Usuarios</i>.</p>
+      <button class="btn ancho" data-a="salir">Salir</button>
+    </div>
+  </section>
+
+  <!-- Aplicación -->
+  <div id="app" hidden>
+    <header class="barra">
+      <div class="marca"><img id="barra-logo" alt="Suckot"><span>Cartas de Mercaderistas</span></div>
+      <nav class="tabs" id="tabs">
+        <button data-tab="generar" class="activo">Generar cartas</button>
+        <button data-tab="ruta">Ruta</button>
+        <button data-tab="mercaderistas">Mercaderistas</button>
+        <button data-tab="tiendas">Tiendas</button>
+        <button data-tab="apoyos">Apoyos</button>
+        <button data-tab="config">Configuración</button>
+      </nav>
+      <div class="usuario">
+        <button class="btn icono" data-a="recargar" title="Actualizar datos">↻</button>
+        <details class="menu">
+          <summary id="usuario-nombre">…</summary>
+          <div class="menu-lista">
+            <span class="menu-rol" id="usuario-rol"></span>
+            <button data-a="cambiar-clave">Cambiar contraseña</button>
+            <button data-a="salir">Salir</button>
+          </div>
+        </details>
+      </div>
+    </header>
+    <div id="aviso-demo" class="aviso-demo" hidden>Modo demo: datos de ejemplo, nada se guarda en la base.</div>
+    <main id="vista"></main>
+  </div>
+
+  <div id="modal-fondo" class="modal-fondo" hidden></div>
+  <div id="ocupado" class="ocupado" hidden><div class="ocupado-caja"><div class="spinner"></div><p id="ocupado-msg">Procesando…</p></div></div>
+  <div id="toast" class="toast" hidden></div>
+</body>
+</html>

@@ -114,6 +114,22 @@ tr.inactivo td { color: var(--gris-claro); }
 .otras { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; padding-top: 8px; }
 .otras span { font-size: 12.5px; color: var(--gris); margin-right: 4px; }
 .faltan { color: var(--alerta); font-size: 12.5px; font-weight: 600; }
+.agregar { padding: 6px 0 8px; border-bottom: 1px dashed var(--borde); margin-bottom: 4px; }
+.agregar input { max-width: 460px; margin-bottom: 6px; }
+.chip .sf { color: var(--rojo-osc); }
+details.ruta-grupo summary { cursor: pointer; font-weight: 700; font-size: 13px; padding: 2px 0 6px; }
+details.ruta-grupo summary small { font-weight: 500; }
+.ayuda-doc { display: grid; grid-template-columns: 230px 1fr; gap: 14px; align-items: start; }
+.ayuda-indice { position: sticky; top: 70px; display: grid; gap: 2px; background: var(--papel); border-radius: var(--radio); box-shadow: var(--sombra); padding: 10px; }
+.ayuda-indice a { color: var(--tinta); text-decoration: none; padding: 5px 8px; border-radius: 6px; font-size: 13px; }
+.ayuda-indice a:hover { background: var(--azul-claro); color: var(--azul); }
+.ayuda-doc article h3 { color: var(--azul); margin: 18px 0 8px; font-size: 16px; }
+.ayuda-doc article h3:first-child { margin-top: 0; }
+.ayuda-doc article p, .ayuda-doc article li { max-width: 80ch; }
+.ayuda-doc article li { margin-bottom: 4px; }
+.ayuda-doc .tabla-caja { box-shadow: none; border: 1px solid var(--borde); margin: 6px 0 12px; }
+.ayuda-doc td { vertical-align: top; }
+.ayuda-nota { background: var(--alerta-claro); border-left: 3px solid #F1D29B; padding: 8px 12px; border-radius: 6px; }
 
 .barra-accion { position: fixed; left: 0; right: 0; bottom: 0; z-index: 15; background: var(--papel); border-top: 1px solid var(--borde); box-shadow: 0 -4px 16px rgba(20, 30, 50, .08); }
 .barra-accion > div { max-width: 1280px; margin: 0 auto; padding: 10px 16px; display: flex; gap: 10px; align-items: center; flex-wrap: wrap; }
@@ -161,6 +177,8 @@ tr.inactivo td { color: var(--gris-claro); }
 @media (max-width: 760px) {
   .marca span { display: none; }
   .cad { grid-template-columns: 1fr; }
+  .ayuda-doc { grid-template-columns: 1fr; }
+  .ayuda-indice { position: static; }
   .merc-cuerpo { padding-left: 14px; }
   .prev { grid-template-columns: 1fr; grid-template-rows: 180px 1fr; }
   .prev-lista { border-right: 0; border-bottom: 1px solid var(--borde); }

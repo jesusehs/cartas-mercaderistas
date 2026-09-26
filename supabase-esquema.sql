@@ -127,3 +127,43 @@ create policy "admin gestiona usuarios" on public.usuarios for all to authentica
 -- Nadie sin sesión (anon) puede leer nada
 revoke all on public.usuarios, public.mercaderistas, public.tiendas, public.ruta,
               public.apoyos, public.config from anon;
+
+-- =====================================================================
+--  v2: código de tienda y creación de accesos desde la app
+-- =====================================================================
+alter table public.tiendas add column if not exists codigo text;
+do $$ begin
+  if not exists (select 1 from pg_constraint where conname = 'tiendas_codigo_key') then
+    alter table public.tiendas add constraint tiendas_codigo_key unique (codigo);
+  end if;
+end $$;
+
+-- Crea el acceso (correo + contraseña) de un usuario. Solo lo puede usar un administrador.
+-- Si el correo ya tiene acceso, no cambia su contraseña.
+create or replace function public.crear_acceso(p_email text, p_clave text)
+returns text language plpgsql security definer
+set search_path = public, auth, extensions as $$
+declare
+  v_id uuid;
+  v_email text := lower(trim(p_email));
+begin
+  if not public.es_admin() then raise exception 'Solo un administrador puede crear accesos'; end if;
+  if v_email !~ '^[^@\s]+@[^@\s]+\.[^@\s]+$' then raise exception 'Correo no válido: %', p_email; end if;
+  if length(coalesce(p_clave, '')) < 6 then raise exception 'La contraseña de % debe tener al menos 6 caracteres', v_email; end if;
+  select id into v_id from auth.users where lower(email) = v_email;
+  if v_id is not null then return 'existente'; end if;
+  v_id := gen_random_uuid();
+  insert into auth.users (instance_id, id, aud, role, email, encrypted_password, email_confirmed_at,
+                          raw_app_meta_data, raw_user_meta_data, created_at, updated_at,
+                          confirmation_token, recovery_token, email_change_token_new, email_change)
+  values ('00000000-0000-0000-0000-000000000000', v_id, 'authenticated', 'authenticated', v_email,
+          extensions.crypt(p_clave, extensions.gen_salt('bf')), now(),
+          '{"provider":"email","providers":["email"]}'::jsonb, '{}'::jsonb, now(), now(), '', '', '', '');
+  insert into auth.identities (id, user_id, provider_id, identity_data, provider, last_sign_in_at, created_at, updated_at)
+  values (gen_random_uuid(), v_id, v_id::text,
+          jsonb_build_object('sub', v_id::text, 'email', v_email, 'email_verified', true),
+          'email', now(), now(), now());
+  return 'creado';
+end $$;
+revoke all on function public.crear_acceso(text, text) from public, anon;
+grant execute on function public.crear_acceso(text, text) to authenticated;

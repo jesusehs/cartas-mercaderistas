@@ -66,7 +66,7 @@
     sb: null, demo: false, email: '', user: null, tab: 'generar',
     db: { mercaderistas: [], tiendas: [], ruta: [], apoyos: [], config: {}, usuarios: [] },
     cargado: 0,
-    gen: { mes: '', fecha: '', sup: '', cadena: '', buscar: '', extras: new Set(), quitados: new Set(), abiertos: new Set(), expandidas: new Set(), modo: 'tienda', inicial: true },
+    gen: { mes: '', fecha: '', sup: '', cadena: '', buscar: '', extras: new Set(), quitados: new Set(), abiertos: new Set(), expandidas: new Set(), buscaT: {}, modo: 'tienda', inicial: true },
     filtro: { sup: '', buscar: '', cadena: '', apoyos: 'vigentes' },
     prev: null
   };
@@ -80,7 +80,8 @@
   const iso = (d) => `${d.getFullYear()}-${dos(d.getMonth() + 1)}-${dos(d.getDate())}`;
   const nombreM = (m) => `${m.nombres} ${m.apellidos}`.trim();
   const nombreLista = (m) => `${m.apellidos}, ${m.nombres}`;
-  const cadenaNombre = (c) => (P.CADENAS[c] ? P.CADENAS[c].nombre : c);
+  const NOMBRES_EXTRA = { 'TAI LOY': 'Tai Loy', 'RIPLEY': 'Ripley', 'MASS': 'Mass' };
+  const cadenaNombre = (c) => (P.CADENAS[c] ? P.CADENAS[c].nombre : NOMBRES_EXTRA[c] || String(c || '').charAt(0) + String(c || '').slice(1).toLowerCase());
   const ordenCadena = (c) => { const i = Object.keys(P.CADENAS).indexOf(c); return i < 0 ? 99 : i; };
   const cfg = () => { const o = {}; CONFIG_CAMPOS.forEach(([k, , , d]) => { o[k] = d; }); return Object.assign(o, S.db.config); };
   const esAdmin = () => S.user && S.user.rol === 'admin';
@@ -339,7 +340,7 @@
   }
   function render() {
     const v = $('#vista');
-    const vistas = { generar: vistaGenerar, ruta: vistaRuta, mercaderistas: vistaMercaderistas, tiendas: vistaTiendas, apoyos: vistaApoyos, config: vistaConfig };
+    const vistas = { generar: vistaGenerar, ruta: vistaRuta, mercaderistas: vistaMercaderistas, tiendas: vistaTiendas, apoyos: vistaApoyos, config: vistaConfig, ayuda: () => (window.Ayuda ? window.Ayuda.html() : '<p>No se pudo cargar la ayuda.</p>') };
     v.innerHTML = (vistas[S.tab] || vistaGenerar)();
     $$('.barra-accion').forEach((b) => b.remove());
     if (S.tab === 'generar') { document.body.insertAdjacentHTML('beforeend', barraAccion()); marcarIndeterminados(); }
@@ -497,6 +498,7 @@
     const nAsig = [...asig.keys()].filter((tid) => { const t = tiendaPorId(tid); return t && t.activa !== false && cads.includes(t.cadena); }).length;
     const faltan = new Set();
     [...new Set(selTiendas.map((t) => t.cadena))].forEach((cad) => P.faltantes(m, cad).forEach((f) => faltan.add(f)));
+    const sinFmt = tiendasActivas().filter((t) => cads.includes(t.cadena) && !P.CADENAS[t.cadena] && seleccionada(m.id, t.id, asig));
     const sup = usuarioPorEmail(m.supervisor_email);
     const resumen = selTiendas.length
       ? selTiendas.map((t) => `${cadenaNombre(t.cadena)} ${t.tienda}`).join(' · ')
@@ -516,7 +518,10 @@
           <div class="chips">${mostrar.map((t) => chipTienda(m, t, asig)).join('')}
           ${resto > 0 ? `<button class="chip-mas" data-a="ver-cadena" data-k="${h(m.id + '|' + cad)}">${exp ? 'Ocultar no asignadas' : `+ ${resto} tienda${resto === 1 ? '' : 's'} más`}</button>` : ''}</div></div>`);
       });
-      cuerpo = `<div class="merc-cuerpo">${conAlgo.join('') || '<p class="muted">Sin tiendas en ruta este mes.</p>'}
+      const q = S.gen.buscaT[m.id] || '';
+      const buscador = `<div class="agregar"><input type="search" placeholder="Buscar cualquier tienda para agregarla (ej.: tottus atocongo)…" value="${h(q)}" data-i="busca-tienda" data-mid="${h(m.id)}">
+        <div class="chips" id="res-${h(m.id)}">${resultadosTienda(m, asig, q)}</div></div>`;
+      cuerpo = `<div class="merc-cuerpo">${buscador}${conAlgo.join('') || '<p class="muted">Sin tiendas en ruta este mes.</p>'}
         ${sinNada.length ? `<div class="otras"><span>Agregar tienda de otra cadena:</span>${sinNada.map(([cad, n]) => `<button class="chip-mas" data-a="ver-cadena" data-k="${h(m.id + '|' + cad)}">+ ${h(cadenaNombre(cad))} (${n})</button>`).join('')}</div>` : ''}</div>`;
     }
     return `<article class="merc ${abierto ? 'abierto' : ''} ${selTiendas.length ? '' : 'sin-sel'}" data-mid="${h(m.id)}">
@@ -524,7 +529,8 @@
         <input type="checkbox" data-c="merc-todo" data-mid="${h(m.id)}" ${selTiendas.length ? 'checked' : ''} data-parcial="${selTiendas.length && selTiendas.length < nAsig ? 1 : 0}" title="Marcar/desmarcar todas sus tiendas">
         <div class="merc-info"><span class="merc-nombre">${h(nombreLista(m))}</span> <span class="muted">· DNI ${h(m.dni)}</span>
           <small>${sup ? 'Supervisor: ' + h(sup.nombre || sup.email) + ' · ' : ''}<span class="merc-resumen">${h(resumen)}</span></small>
-          ${faltan.size ? `<small class="faltan">⚠ Falta ${h([...faltan].join(', '))} — complétalo en Mercaderistas</small>` : ''}</div>
+          ${faltan.size ? `<small class="faltan">⚠ Falta ${h([...faltan].join(', '))} — complétalo en Mercaderistas</small>` : ''}
+          ${sinFmt.length ? `<small class="muted">${sinFmt.length} tienda${sinFmt.length === 1 ? '' : 's'} de ${h([...new Set(sinFmt.map((t) => cadenaNombre(t.cadena)))].join(', '))} sin formato de carta todavía (no se generan).</small>` : ''}</div>
         <span class="tag ${selTiendas.length ? 'ok' : ''}">${selTiendas.length} carta${selTiendas.length === 1 ? '' : 's'}</span>
         <div class="merc-acc">
           <button class="btn chico" data-a="prev-merc" data-mid="${h(m.id)}" ${selTiendas.length ? '' : 'disabled'}>Ver</button>
@@ -534,11 +540,21 @@
       </div>${cuerpo}</article>`;
   }
 
-  function chipTienda(m, t, asig) {
+  function resultadosTienda(m, asig, q) {
+    const toks = norm(q).split(' ').filter(Boolean);
+    if (!toks.length || norm(q).length < 2) return '';
+    const res = tiendasActivas().filter((t) => { const txt = norm(`${cadenaNombre(t.cadena)} ${t.tienda} ${t.codigo || ''} ${t.nombre_carta || ''}`); return toks.every((k) => txt.includes(k)); })
+      .sort((a, b) => ordenCadena(a.cadena) - ordenCadena(b.cadena) || a.tienda.localeCompare(b.tienda));
+    if (!res.length) return '<span class="muted">Sin resultados.</span>';
+    return res.slice(0, 30).map((t) => chipTienda(m, t, asig, true)).join('') + (res.length > 30 ? `<span class="muted">… y ${res.length - 30} más, escribe más detalle.</span>` : '');
+  }
+
+  function chipTienda(m, t, asig, conCadena) {
     const a = asig.get(t.id);
     const on = seleccionada(m.id, t.id, asig);
     const etiqueta = a ? (a.tipo === 'Apoyo' ? `Apoyo ${P.fCorta(a.desde).slice(0, 5)}–${P.fCorta(a.hasta).slice(0, 5)}` : 'Ruta') : (on ? 'Adicional' : '');
-    return `<label class="chip ${on ? 'on' : ''} ${a ? '' : 'extra'}"><input type="checkbox" data-c="tienda" data-mid="${h(m.id)}" data-tid="${h(t.id)}" ${on ? 'checked' : ''}>${h(t.tienda)}${etiqueta ? ` <small>${h(etiqueta)}</small>` : ''}</label>`;
+    const sinFormato = !P.CADENAS[t.cadena] ? ' <small class="sf">sin formato</small>' : '';
+    return `<label class="chip ${on ? 'on' : ''} ${a ? '' : 'extra'}"><input type="checkbox" data-c="tienda" data-mid="${h(m.id)}" data-tid="${h(t.id)}" ${on ? 'checked' : ''}>${conCadena ? h(cadenaNombre(t.cadena)) + ' · ' : ''}${h(t.tienda)}${etiqueta ? ` <small>${h(etiqueta)}</small>` : ''}${conCadena ? sinFormato : ''}</label>`;
   }
 
   function barraAccion() {
@@ -578,6 +594,13 @@
       $('#lista-gen') ? ($('#lista-gen').innerHTML = mercs.map((m) => tarjetaMerc(m, cadenas)).join('')) : render();
       const b = $('.barra-accion'); if (b) b.outerHTML = barraAccion(); marcarIndeterminados();
     }, 200);
+  };
+  CAMBIOS['busca-tienda'] = (el) => {
+    const mid = el.dataset.mid; S.gen.buscaT[mid] = el.value;
+    clearTimeout(CAMBIOS.tb); CAMBIOS.tb = setTimeout(() => {
+      const cont = document.getElementById('res-' + mid);
+      if (cont) cont.innerHTML = resultadosTienda(mercPorId(mid), asignaciones(mid), el.value);
+    }, 150);
   };
   CAMBIOS.tienda = (el) => {
     const mid = el.dataset.mid, tid = el.dataset.tid, k = clave(mid, tid);
@@ -739,7 +762,7 @@
         <td>${ts.length ? ts.map((t) => `<span class="tag azul">${h(cadenaNombre(t.cadena))} · ${h(t.tienda)}</span>`).join('') : '<span class="muted">Sin tiendas</span>'}</td>
         <td class="acciones"><button class="btn chico" data-a="editar-ruta" data-mid="${h(m.id)}">Editar ruta</button></td></tr>`;
     }).join('');
-    return `<div class="cabecera"><div><h2>Ruta de mercaderistas</h2><small>Tiendas fijas de cada mercaderista. Se usan cada mes para generar las cartas.</small></div></div>
+    return `<div class="cabecera"><div><h2>Ruta de mercaderistas</h2><small>Tiendas fijas de cada mercaderista. Se usan cada mes para generar las cartas.</small></div><div>${botonesExcel('ruta')}</div></div>
       ${barraFiltros()}
       <div class="tabla-caja"><table><thead><tr><th>Mercaderista</th><th>Supervisor</th><th>Tiendas en ruta</th><th></th></tr></thead>
       <tbody>${filas || '<tr><td colspan="4" class="vacio">No hay mercaderistas para este filtro.</td></tr>'}</tbody></table></div>`;
@@ -751,8 +774,8 @@
     const grupos = cadenasDisponibles().map((cad) => {
       const ts = tiendasActivas().filter((t) => t.cadena === cad).sort((a, b) => a.tienda.localeCompare(b.tienda));
       const n = ts.filter((t) => actuales.has(t.id)).length;
-      return `<div class="ruta-grupo" data-cad="${h(cad)}"><h4>${h(cadenaNombre(cad))} <small class="muted">${n} de ${ts.length}</small></h4><div class="chips">
-        ${ts.map((t) => `<label class="check" data-nombre="${h(norm(cadenaNombre(cad) + ' ' + t.tienda))}"><input type="checkbox" name="t" value="${h(t.id)}" ${actuales.has(t.id) ? 'checked' : ''}>${h(t.tienda)}</label>`).join('')}</div></div>`;
+      return `<details class="ruta-grupo" data-cad="${h(cad)}" ${n ? 'open' : ''}><summary>${h(cadenaNombre(cad))} <small class="muted">${n} de ${ts.length}${P.CADENAS[cad] ? '' : ' · sin formato de carta'}</small></summary><div class="chips">
+        ${ts.map((t) => `<label class="check" data-nombre="${h(norm(cadenaNombre(cad) + ' ' + t.tienda + ' ' + (t.codigo || '')))}"><input type="checkbox" name="t" value="${h(t.id)}" ${actuales.has(t.id) ? 'checked' : ''}>${h(t.tienda)}</label>`).join('')}</div></details>`;
     }).join('');
     abrirModal(`${cabModal('Ruta de ' + nombreM(m))}
       <form id="f-ruta"><div class="modal-cuerpo">
@@ -774,6 +797,7 @@
   CAMBIOS['filtro-ruta'] = (el) => {
     const b = norm(el.value);
     $$('#f-ruta label.check').forEach((l) => { l.hidden = b && !l.dataset.nombre.includes(b); });
+    $$('#f-ruta details.ruta-grupo').forEach((d) => { if (b) { const hay = $$('label.check', d).some((l) => !l.hidden); d.hidden = !hay; d.open = hay; } else d.hidden = false; });
   };
 
   // =====================================================================
@@ -790,7 +814,7 @@
         <td class="acciones"><button class="btn chico" data-a="editar-merc" data-mid="${h(m.id)}">Editar</button></td></tr>`;
     }).join('');
     return `<div class="cabecera"><div><h2>Mercaderistas</h2><small>${mercs.length} registrados en este filtro</small></div>
-      <button class="btn primario" data-a="editar-merc">+ Nuevo mercaderista</button></div>
+      <div>${botonesExcel('mercaderistas')} <button class="btn primario" data-a="editar-merc">+ Nuevo mercaderista</button></div></div>
       ${barraFiltros()}
       <div class="tabla-caja"><table><thead><tr><th>Nombre</th><th>DNI</th><th>Supervisor</th><th>F. ingreso</th><th>Cap. SST</th><th>Carnet salud</th><th>Código CFR</th><th>Estado</th><th></th></tr></thead>
       <tbody>${filas || '<tr><td colspan="9" class="vacio">No hay mercaderistas para este filtro.</td></tr>'}</tbody></table></div>`;
@@ -848,32 +872,35 @@
     const b = norm(S.filtro.buscar);
     const ts = S.db.tiendas
       .filter((t) => !S.filtro.cadena || t.cadena === S.filtro.cadena)
-      .filter((t) => !b || norm(t.cadena + ' ' + t.tienda + ' ' + (t.nombre_carta || '')).includes(b))
+      .filter((t) => !b || norm(t.cadena + ' ' + t.tienda + ' ' + (t.nombre_carta || '') + ' ' + (t.codigo || '')).includes(b))
       .sort((a, c) => ordenCadena(a.cadena) - ordenCadena(c.cadena) || a.tienda.localeCompare(c.tienda));
     const cadenas = [...new Set(Object.keys(P.CADENAS).concat(S.db.tiendas.map((t) => t.cadena)))];
-    const filas = ts.map((t) => {
+    const LIM = 300;
+    const filas = ts.slice(0, LIM).map((t) => {
       const n = S.db.ruta.filter((r) => r.tienda_id === t.id).length;
-      return `<tr class="${t.activa === false ? 'inactivo' : ''}"><td>${h(cadenaNombre(t.cadena))}${P.CADENAS[t.cadena] ? '' : ' <span class="tag rojo">sin formato</span>'}</td><td><b>${h(t.tienda)}</b></td>
+      return `<tr class="${t.activa === false ? 'inactivo' : ''}"><td>${h(cadenaNombre(t.cadena))}${P.CADENAS[t.cadena] ? '' : ' <span class="tag rojo">sin formato</span>'}</td><td><b>${h(t.tienda)}</b><br><small>${h(t.codigo || '')}</small></td>
         <td>${h(t.nombre_carta || '')}</td><td>${h(t.gerente || '—')}</td><td>${n}</td><td>${t.activa === false ? '<span class="tag">Inactiva</span>' : '<span class="tag ok">Activa</span>'}</td>
         <td class="acciones"><button class="btn chico" data-a="editar-tienda" data-tid="${h(t.id)}">Editar</button></td></tr>`;
     }).join('');
     return `<div class="cabecera"><div><h2>Tiendas</h2><small>${ts.length} tiendas en este filtro</small></div>
-      <button class="btn primario" data-a="editar-tienda">+ Nueva tienda</button></div>
+      <div>${botonesExcel('tiendas')} <button class="btn primario" data-a="editar-tienda">+ Nueva tienda</button></div></div>
       <div class="filtros">
         <label>Cadena<select data-c="f-cadena"><option value="">Todas</option>${cadenas.map((c) => `<option value="${h(c)}" ${S.filtro.cadena === c ? 'selected' : ''}>${h(cadenaNombre(c))}</option>`).join('')}</select></label>
         <label>Buscar<input type="search" placeholder="Tienda" value="${h(S.filtro.buscar)}" data-i="f-buscar"></label></div>
       <div class="tabla-caja"><table><thead><tr><th>Cadena</th><th>Tienda</th><th>Nombre en la carta</th><th>Gerente (Tottus)</th><th>Mercaderistas</th><th>Estado</th><th></th></tr></thead>
-      <tbody>${filas || '<tr><td colspan="7" class="vacio">No hay tiendas.</td></tr>'}</tbody></table></div>`;
+      <tbody>${filas || '<tr><td colspan="7" class="vacio">No hay tiendas.</td></tr>'}</tbody></table></div>
+      ${ts.length > LIM ? `<p class="muted" style="margin-top:8px">Se muestran ${LIM} de ${ts.length}. Usa el filtro de cadena o el buscador para encontrar las demás.</p>` : ''}`;
   }
   CAMBIOS['f-cadena'] = (el) => { S.filtro.cadena = el.value; render(); };
 
   ACCIONES['editar-tienda'] = (el) => {
     const t = el.dataset.tid ? tiendaPorId(el.dataset.tid) : { cadena: S.filtro.cadena || 'TOTTUS', activa: true };
-    const cadenas = [...new Set(Object.keys(P.CADENAS).concat(t.cadena ? [t.cadena] : []))];
+    const cadenas = [...new Set(Object.keys(P.CADENAS).concat(S.db.tiendas.map((x) => x.cadena), t.cadena ? [t.cadena] : []))];
     abrirModal(`${cabModal(t.id ? 'Editar tienda' : 'Nueva tienda')}
       <form id="f-tienda"><div class="modal-cuerpo form-grid">
-        <label>Cadena<select name="cadena">${cadenas.map((c) => `<option value="${h(c)}" ${t.cadena === c ? 'selected' : ''}>${h(cadenaNombre(c))}</option>`).join('')}</select></label>
+        <label>Cadena<input type="text" name="cadena" list="lista-cadenas" required value="${h(t.cadena || '')}" style="text-transform:uppercase"><datalist id="lista-cadenas">${cadenas.map((c) => `<option value="${h(c)}">${h(cadenaNombre(c))}</option>`).join('')}</datalist><span class="ayuda">Elige una o escribe una nueva (ej.: RIPLEY).</span></label>
         <label>Tienda<input type="text" name="tienda" required placeholder="Ej.: La Fontana" value="${h(t.tienda || '')}"></label>
+        <label>Código (opcional)<input type="text" name="codigo" placeholder="Ej.: TOTTUS-123" value="${h(t.codigo || '')}"></label>
         <label class="completo">Nombre como aparece en la carta<input type="text" name="nombre_carta" placeholder="Ej.: HIPERMERCADOS TOTTUS LA FONTANA" value="${h(t.nombre_carta || '')}"><span class="ayuda">Si lo dejas vacío se usa «CADENA TIENDA».</span></label>
         <label class="completo">Gerente de tienda<input type="text" name="gerente" value="${h(t.gerente || '')}"><span class="ayuda">Solo lo usa la carta de presentación de Tottus.</span></label>
         <label class="completo check"><input type="checkbox" name="activa" ${t.activa !== false ? 'checked' : ''}> Activa</label>
@@ -883,7 +910,7 @@
     $('#f-tienda').addEventListener('submit', async (ev) => {
       ev.preventDefault();
       const f = new FormData(ev.target);
-      const datos = { cadena: String(f.get('cadena')), tienda: String(f.get('tienda')).trim(), nombre_carta: nulo(String(f.get('nombre_carta')).trim().toUpperCase()), gerente: nulo(String(f.get('gerente')).trim()), activa: f.get('activa') === 'on' };
+      const datos = { cadena: String(f.get('cadena')).trim().toUpperCase(), tienda: String(f.get('tienda')).trim(), codigo: nulo(String(f.get('codigo') || '').trim()), nombre_carta: nulo(String(f.get('nombre_carta')).trim().toUpperCase()), gerente: nulo(String(f.get('gerente')).trim()), activa: f.get('activa') === 'on' };
       await conManejo(async () => {
         if (t.id) await api.actualizar('tiendas', t.id, datos); else await api.insertar('tiendas', [datos]);
         cerrarModal(); render(); toast('Tienda guardada');
@@ -919,7 +946,7 @@
         <td class="acciones"><button class="btn chico peligro" data-a="borrar-apoyo" data-id="${h(a.id)}">Eliminar</button></td></tr>`;
     }).join('');
     return `<div class="cabecera"><div><h2>Apoyos</h2><small>Tiendas fuera de la ruta por un periodo (reemplazos, inventarios, campañas). Se marcan solas al generar las cartas del mes.</small></div>
-      <button class="btn primario" data-a="nuevo-apoyo">+ Nuevo apoyo</button></div>
+      <div>${botonesExcel('apoyos')} <button class="btn primario" data-a="nuevo-apoyo">+ Nuevo apoyo</button></div></div>
       ${barraFiltros(`<label>Mostrar<select data-c="f-apoyos"><option value="vigentes" ${S.filtro.apoyos === 'vigentes' ? 'selected' : ''}>Vigentes y próximos</option><option value="todos" ${S.filtro.apoyos === 'todos' ? 'selected' : ''}>Todos</option></select></label>`)}
       <div class="tabla-caja"><table><thead><tr><th>Mercaderista</th><th>Tienda</th><th>Desde</th><th>Hasta</th><th>Nota</th><th>Registrado por</th><th></th></tr></thead>
       <tbody>${filas || '<tr><td colspan="7" class="vacio">No hay apoyos registrados.</td></tr>'}</tbody></table></div>`;
@@ -964,8 +991,9 @@
       </div></div>`).join('');
     const ref = (CFG.supabaseUrl || '').replace(/^https:\/\/([^.]+)\..*$/, '$1');
     const usuarios = admin ? `<div class="panel"><h3>Usuarios y supervisores</h3>
-      <p class="ayuda" style="margin-bottom:10px">Cada supervisor ve por defecto a sus mercaderistas. Para que alguien pueda ingresar: 1) agrégalo aquí y 2) créale su acceso (correo + contraseña) en
-      <a href="https://supabase.com/dashboard/project/${h(ref)}/auth/users" target="_blank" rel="noopener">Supabase → Authentication → Users → Add user</a> (marca «Auto Confirm User»).</p>
+      <p class="ayuda" style="margin-bottom:10px">Cada supervisor ve por defecto a sus mercaderistas. Al agregar un usuario con contraseña (o cargarlo por Excel con la columna CONTRASEÑA) se le crea su acceso para ingresar. Si alguien olvida su contraseña, restablécela en
+      <a href="https://supabase.com/dashboard/project/${h(ref)}/auth/users" target="_blank" rel="noopener">Supabase → Authentication → Users</a>.</p>
+      <p style="margin-bottom:10px">${botonesExcel('usuarios')}</p>
       <div class="tabla-caja"><table><thead><tr><th>Correo</th><th>Nombre</th><th>Celular (va en las cartas)</th><th>Rol</th><th>Mercaderistas</th><th></th></tr></thead><tbody>
       ${supervisores().map((u) => `<tr><td>${h(u.email)}</td><td>${h(u.nombre || '')}</td><td>${h(u.celular || '')}</td><td>${u.rol === 'admin' ? '<span class="tag azul">Administrador</span>' : '<span class="tag">Supervisor</span>'}</td>
         <td>${S.db.mercaderistas.filter((m) => (m.supervisor_email || '').toLowerCase() === u.email.toLowerCase()).length}</td>
@@ -979,10 +1007,8 @@
       </div>
       <form id="f-config">${campos}</form>
       ${usuarios}
-      <div class="panel"><h3>Importar / exportar Excel</h3>
-        <p class="ayuda" style="margin-bottom:10px">El Excel tiene las hojas MERCADERISTAS, TIENDAS, RUTA, APOYOS, USUARIOS y CONFIG. Descárgalo, complétalo y vuelve a importarlo para cargar a muchos mercaderistas de una vez. Al importar, la RUTA de cada mercaderista incluido en la hoja se reemplaza por la del Excel.</p>
-        <button class="btn" data-a="exportar">Descargar Excel (respaldo / plantilla)</button>
-        ${admin ? '<label class="btn" style="display:inline-flex">Importar Excel<input type="file" accept=".xlsx,.xls" data-c="importar" hidden></label>' : ''}
+      <div class="panel"><h3>Carga masiva con Excel</h3>
+        <p class="ayuda">Cada pestaña tiene su propio Excel: <b>Mercaderistas</b>, <b>Tiendas</b>, <b>Ruta</b> y <b>Apoyos</b> (y <b>Usuarios</b> aquí arriba). Descarga la base actual, modifícala y vuelve a cargarla. El paso a paso está en la pestaña <b>Ayuda</b>.</p>
       </div>`;
   }
 
@@ -1021,6 +1047,7 @@
         <label>Nombre<input type="text" name="nombre" required value="${h(u.nombre || '')}"></label>
         <label>Celular<input type="text" name="celular" value="${h(u.celular || '')}"><span class="ayuda">Aparece como contacto del supervisor (Plaza Vea y Oechsle).</span></label>
         <label>Rol<select name="rol"><option value="supervisor" ${u.rol !== 'admin' ? 'selected' : ''}>Supervisor</option><option value="admin" ${u.rol === 'admin' ? 'selected' : ''}>Administrador</option></select></label>
+        <label>Contraseña ${u.email ? '(solo si aún no tiene acceso)' : 'para ingresar'}<input type="text" name="clave" minlength="6" autocomplete="off" placeholder="Ej.: su DNI"><span class="ayuda">Mínimo 6 caracteres. Luego puede cambiarla desde su menú.</span></label>
       </div><div class="modal-pie">
         ${u.email && u.email !== S.email ? '<button type="button" class="btn peligro izq" data-a="borrar-usuario" data-email="' + h(u.email) + '">Quitar acceso</button>' : ''}
         <button type="button" class="btn" data-a="cerrar-modal">Cancelar</button><button class="btn primario">Guardar</button></div></form>`);
@@ -1028,7 +1055,13 @@
       ev.preventDefault();
       const f = new FormData(ev.target);
       const datos = { email: String(f.get('email')).trim().toLowerCase(), nombre: String(f.get('nombre')).trim(), celular: nulo(String(f.get('celular')).trim()), rol: f.get('rol') };
-      await conManejo(async () => { await api.upsert('usuarios', [datos], 'email'); cerrarModal(); render(); toast('Usuario guardado'); }, 'Guardando…');
+      const clave = String(f.get('clave') || '').trim();
+      await conManejo(async () => {
+        await api.upsert('usuarios', [datos], 'email');
+        let extra = '';
+        if (clave) extra = (await crearAcceso(datos.email, clave)) === 'creado' ? ' y acceso creado' : ' (ya tenía acceso; la contraseña no se cambió)';
+        cerrarModal(); render(); toast('Usuario guardado' + extra);
+      }, 'Guardando…');
     });
   };
   ACCIONES['borrar-usuario'] = (el) => {
@@ -1050,106 +1083,224 @@
   const txt = (v) => (v == null ? '' : String(v).trim());
   const siNo = (v) => !/^(no|n|0|false|inactiv[oa])$/i.test(txt(v));
 
-  ACCIONES.exportar = () => conManejo(async () => {
+  // ---------- Accesos (usuarios que pueden ingresar) ----------
+  async function crearAcceso(email, clave) {
+    if (S.demo) return 'creado';
+    const { data, error } = await S.sb.rpc('crear_acceso', { p_email: email, p_clave: String(clave) });
+    if (error) throw error;
+    return data;
+  }
+
+  // ---------- Excel por entidad (descargar la base actual / cargar cambios) ----------
+  const porTrozos = (arr, n) => { const out = []; for (let i = 0; i < arr.length; i += n) out.push(arr.slice(i, i + n)); return out; };
+  const nombreFiltro = () => (S.filtro.sup === '__todos__' ? 'todos' : S.filtro.sup === '__sin__' ? 'sin supervisor' : ((usuarioPorEmail(S.filtro.sup) || {}).nombre || S.filtro.sup));
+  const dniTxt = (v) => { let d = txt(v).replace(/\.0+$/, ''); if (/^\d{1,7}$/.test(d)) d = d.padStart(8, '0'); return d; };
+  const buscaMerc = (v) => { const d = dniTxt(v); return d ? S.db.mercaderistas.find((m) => m.dni === d) : null; };
+  function buscadorTiendas() {
+    const porCod = new Map(S.db.tiendas.filter((t) => t.codigo).map((t) => [t.codigo.toUpperCase(), t]));
+    const porNom = new Map(S.db.tiendas.map((t) => [t.cadena + '|' + norm(t.tienda), t]));
+    return (r) => (txt(r.CODIGO) && porCod.get(txt(r.CODIGO).toUpperCase())) || porNom.get(txt(r.CADENA).toUpperCase() + '|' + norm(r.TIENDA)) || null;
+  }
+  const ordenTiendas = (a, b) => ordenCadena(a.cadena) - ordenCadena(b.cadena) || a.cadena.localeCompare(b.cadena) || a.tienda.localeCompare(b.tienda);
+
+  const EXCEL = {
+    usuarios: {
+      titulo: 'Usuarios', soloAdmin: true, requeridas: ['EMAIL'],
+      cols: ['EMAIL', 'NOMBRE', 'CELULAR', 'ROL', 'CONTRASEÑA'],
+      filas: () => supervisores().map((u) => [u.email, u.nombre || '', u.celular || '', u.rol, '']),
+      async importar(filas, cab) {
+        const rows = filas.filter((r) => txt(r.EMAIL)).map((r) => {
+          const o = { email: txt(r.EMAIL).toLowerCase() };
+          if (cab.has('NOMBRE')) o.nombre = txt(r.NOMBRE) || null;
+          if (cab.has('CELULAR')) o.celular = txt(r.CELULAR) || null;
+          if (cab.has('ROL')) o.rol = /admin/i.test(txt(r.ROL)) || o.email === S.email ? 'admin' : 'supervisor';
+          return o;
+        });
+        ocupado('Cargando usuarios…');
+        await api.upsert('usuarios', rows, 'email');
+        const conClave = filas.filter((r) => txt(r.EMAIL) && txt(r.CONTRASENA));
+        let creados = 0, existian = 0; const errores = [];
+        for (let i = 0; i < conClave.length; i++) {
+          ocupado(`Creando accesos ${i + 1} de ${conClave.length}…`);
+          const r = conClave[i];
+          try { (await crearAcceso(txt(r.EMAIL).toLowerCase(), dniTxt(r.CONTRASENA) || txt(r.CONTRASENA))) === 'creado' ? creados++ : existian++; }
+          catch (e) { errores.push(`${txt(r.EMAIL)}: ${errorAmigable(e)}`); }
+        }
+        let texto = `Usuarios: ${rows.length} cargados.`;
+        if (conClave.length) texto += ` Accesos: ${creados} creados${existian ? `, ${existian} ya existían (no se cambió su contraseña)` : ''}.`;
+        if (errores.length) texto += ` No se pudo crear: ${errores.join('; ')}`;
+        return { texto, alerta: errores.length > 0 };
+      }
+    },
+    tiendas: {
+      titulo: 'Tiendas', requeridas: ['CADENA', 'TIENDA'],
+      cols: ['CODIGO', 'CADENA', 'TIENDA', 'NOMBRE_CARTA', 'GERENTE', 'ACTIVA'],
+      filas: () => S.db.tiendas.slice().sort(ordenTiendas).map((t) => [t.codigo || '', t.cadena, t.tienda, t.nombre_carta || '', t.gerente || '', t.activa === false ? 'NO' : 'SI']),
+      async importar(filas, cab) {
+        const busca = buscadorTiendas();
+        const nuevas = [], cambios = [], vistos = new Set();
+        filas.forEach((r) => {
+          const cadena = txt(r.CADENA).toUpperCase(), tienda = txt(r.TIENDA);
+          if (!cadena || !tienda) return;
+          const o = { cadena, tienda };
+          if (cab.has('CODIGO')) o.codigo = txt(r.CODIGO) || null;
+          if (cab.has('NOMBRE_CARTA')) o.nombre_carta = txt(r.NOMBRE_CARTA).toUpperCase() || null;
+          if (cab.has('GERENTE')) o.gerente = txt(r.GERENTE) || null;
+          if (cab.has('ACTIVA')) o.activa = siNo(r.ACTIVA);
+          const ex = busca({ CODIGO: o.codigo, CADENA: cadena, TIENDA: tienda });
+          const k = ex ? ex.id : (o.codigo || cadena + '|' + norm(tienda));
+          if (vistos.has(k)) return;
+          vistos.add(k);
+          if (ex) cambios.push(Object.assign({ id: ex.id }, o)); else nuevas.push(o);
+        });
+        const lotesC = porTrozos(cambios, 500), lotesN = porTrozos(nuevas, 500);
+        for (let i = 0; i < lotesC.length; i++) { ocupado(`Actualizando tiendas ${i + 1}/${lotesC.length}…`); await api.upsert('tiendas', lotesC[i], 'id'); }
+        for (let i = 0; i < lotesN.length; i++) { ocupado(`Creando tiendas ${i + 1}/${lotesN.length}…`); await api.insertar('tiendas', lotesN[i]); }
+        return { texto: `Tiendas: ${nuevas.length} nuevas y ${cambios.length} actualizadas.` };
+      }
+    },
+    mercaderistas: {
+      titulo: 'Mercaderistas', porSupervisor: true, requeridas: ['DNI', 'NOMBRES'],
+      cols: ['NOMBRES', 'APELLIDOS', 'DNI', 'SEXO', 'SUPERVISOR_EMAIL', 'FECHA_INGRESO', 'FECHA_CAP_SST', 'CARNET_SALUD', 'CODIGO_CFR', 'ACTIVO'],
+      filas: () => filtrarMercs(S.filtro.sup, '', true).map((m) => [m.nombres, m.apellidos, m.dni, m.sexo, m.supervisor_email || '',
+        m.fecha_ingreso ? P.fCorta(m.fecha_ingreso) : '', m.fecha_cap_sst ? P.fCorta(m.fecha_cap_sst) : '', m.carnet_salud || '', m.codigo_cfr || '', m.activo === false ? 'NO' : 'SI']),
+      async importar(filas, cab) {
+        const emails = new Set(S.db.usuarios.map((u) => u.email.toLowerCase()));
+        const sinSup = new Set(), vistos = new Set(), rows = [];
+        filas.forEach((r) => {
+          const dni = dniTxt(r.DNI);
+          if (!dni || !txt(r.NOMBRES) || vistos.has(dni)) return;
+          vistos.add(dni);
+          const o = { dni, nombres: txt(r.NOMBRES), apellidos: txt(r.APELLIDOS) };
+          if (cab.has('SEXO')) o.sexo = /^m/i.test(txt(r.SEXO)) ? 'M' : 'F';
+          if (cab.has('SUPERVISOR_EMAIL')) {
+            let sup = txt(r.SUPERVISOR_EMAIL).toLowerCase() || null;
+            if (sup && !emails.has(sup)) { sinSup.add(sup); sup = null; }
+            o.supervisor_email = sup;
+          }
+          if (cab.has('FECHA_INGRESO')) o.fecha_ingreso = fechaExcel(r.FECHA_INGRESO);
+          if (cab.has('FECHA_CAP_SST')) o.fecha_cap_sst = fechaExcel(r.FECHA_CAP_SST);
+          if (cab.has('CARNET_SALUD')) o.carnet_salud = txt(r.CARNET_SALUD) || null;
+          if (cab.has('CODIGO_CFR')) o.codigo_cfr = txt(r.CODIGO_CFR) || null;
+          if (cab.has('ACTIVO')) o.activo = siNo(r.ACTIVO);
+          rows.push(o);
+        });
+        const lotes = porTrozos(rows, 500);
+        for (let i = 0; i < lotes.length; i++) { ocupado(`Cargando mercaderistas ${i + 1}/${lotes.length}…`); await api.upsert('mercaderistas', lotes[i], 'dni'); }
+        let texto = `Mercaderistas: ${rows.length} cargados o actualizados.`;
+        if (sinSup.size) texto += ` Estos supervisores no están en Usuarios y quedaron sin asignar: ${[...sinSup].join(', ')}.`;
+        return { texto, alerta: sinSup.size > 0 };
+      }
+    },
+    ruta: {
+      titulo: 'Ruta', porSupervisor: true, requeridas: ['DNI'],
+      cols: ['DNI', 'MERCADERISTA', 'CODIGO', 'CADENA', 'TIENDA'],
+      filas: () => {
+        const out = [];
+        filtrarMercs(S.filtro.sup, '', true).forEach((m) => {
+          S.db.ruta.filter((r) => r.mercaderista_id === m.id).map((r) => tiendaPorId(r.tienda_id)).filter(Boolean).sort(ordenTiendas)
+            .forEach((t) => out.push([m.dni, nombreLista(m), t.codigo || '', t.cadena, t.tienda]));
+        });
+        return out;
+      },
+      async importar(filas) {
+        const busca = buscadorTiendas();
+        const porM = new Map(), noM = new Set(), noT = [];
+        filas.forEach((r) => {
+          const m = buscaMerc(r.DNI);
+          if (!m) { if (txt(r.DNI)) noM.add(dniTxt(r.DNI)); return; }
+          if (!porM.has(m.id)) porM.set(m.id, new Set());
+          if (!txt(r.CODIGO) && !txt(r.TIENDA)) return; // fila solo con DNI: queda sin ruta
+          const t = busca(r);
+          if (!t) { noT.push(`${txt(r.CADENA)} ${txt(r.TIENDA)} ${txt(r.CODIGO)}`.replace(/\s+/g, ' ').trim()); return; }
+          porM.get(m.id).add(t.id);
+        });
+        ocupado('Actualizando ruta…');
+        for (const lote of porTrozos([...porM.keys()], 100)) await api.borrar('ruta', { mercaderista_id: lote });
+        const nuevas = [];
+        porM.forEach((set, mid) => set.forEach((tid) => nuevas.push({ mercaderista_id: mid, tienda_id: tid })));
+        for (const lote of porTrozos(nuevas, 500)) await api.insertar('ruta', lote);
+        let texto = `Ruta: ${porM.size} mercaderistas actualizados (${nuevas.length} tiendas asignadas).`;
+        if (noM.size) texto += ` DNI no registrados en Mercaderistas: ${[...noM].slice(0, 8).join(', ')}${noM.size > 8 ? '…' : ''}.`;
+        if (noT.length) texto += ` Tiendas no encontradas: ${noT.slice(0, 5).join('; ')}${noT.length > 5 ? '…' : ''}.`;
+        return { texto, alerta: noM.size > 0 || noT.length > 0 };
+      }
+    },
+    apoyos: {
+      titulo: 'Apoyos', porSupervisor: true, requeridas: ['DNI', 'DESDE', 'HASTA'],
+      cols: ['DNI', 'MERCADERISTA', 'CODIGO', 'CADENA', 'TIENDA', 'DESDE', 'HASTA', 'NOTA'],
+      filas: () => {
+        const ids = new Set(filtrarMercs(S.filtro.sup, '', true).map((m) => m.id));
+        return S.db.apoyos.filter((a) => ids.has(a.mercaderista_id)).sort((a, b) => (a.desde < b.desde ? 1 : -1)).map((a) => {
+          const m = mercPorId(a.mercaderista_id) || {}, t = tiendaPorId(a.tienda_id) || {};
+          return [m.dni || '', m.nombres ? nombreLista(m) : '', t.codigo || '', t.cadena || '', t.tienda || '', P.fCorta(a.desde), P.fCorta(a.hasta), a.nota || ''];
+        });
+      },
+      async importar(filas) {
+        const busca = buscadorTiendas();
+        const nuevas = [], errores = [];
+        filas.forEach((r) => {
+          const m = buscaMerc(r.DNI), t = busca(r), d = fechaExcel(r.DESDE), hs = fechaExcel(r.HASTA);
+          if (!m || !t || !d || !hs) { errores.push(`${txt(r.DNI)} ${txt(r.TIENDA)}`.trim()); return; }
+          if (S.db.apoyos.some((a) => a.mercaderista_id === m.id && a.tienda_id === t.id && a.desde === d && a.hasta === hs)) return;
+          nuevas.push({ mercaderista_id: m.id, tienda_id: t.id, desde: d, hasta: hs, nota: txt(r.NOTA) || null });
+        });
+        for (const lote of porTrozos(nuevas, 500)) await api.insertar('apoyos', lote);
+        let texto = `Apoyos: ${nuevas.length} nuevos.`;
+        if (errores.length) texto += ` Filas con datos incompletos o no encontrados: ${errores.slice(0, 5).join('; ')}${errores.length > 5 ? '…' : ''}.`;
+        return { texto, alerta: errores.length > 0 };
+      }
+    }
+  };
+
+  function botonesExcel(e) {
+    if (EXCEL[e].soloAdmin && !esAdmin()) return '';
+    return `<button class="btn" data-a="xls-bajar" data-e="${e}" title="Descarga la base actual para revisarla o modificarla">⬇ Descargar Excel</button>
+      <label class="btn" title="Carga un Excel con el mismo formato de la descarga">⬆ Cargar Excel<input type="file" accept=".xlsx,.xls,.csv" data-c="xls-subir" data-e="${e}" hidden></label>`;
+  }
+
+  ACCIONES['xls-bajar'] = (el) => conManejo(async () => {
+    const d = EXCEL[el.dataset.e];
     await cargarScript(LIBS.xlsx);
-    const X = window.XLSX, wb = X.utils.book_new();
-    const hoja = (nombre, filas, cabeceras) => X.utils.book_append_sheet(wb, X.utils.json_to_sheet(filas, { header: cabeceras }), nombre);
-    const mNom = (id) => { const m = mercPorId(id); return m ? m : {}; };
-    hoja('MERCADERISTAS', S.db.mercaderistas.map((m) => ({ NOMBRES: m.nombres, APELLIDOS: m.apellidos, DNI: m.dni, SEXO: m.sexo, SUPERVISOR_EMAIL: m.supervisor_email || '', FECHA_INGRESO: m.fecha_ingreso ? P.fCorta(m.fecha_ingreso) : '', FECHA_CAP_SST: m.fecha_cap_sst ? P.fCorta(m.fecha_cap_sst) : '', CARNET_SALUD: m.carnet_salud || '', CODIGO_CFR: m.codigo_cfr || '', ACTIVO: m.activo === false ? 'NO' : 'SI' })),
-      ['NOMBRES', 'APELLIDOS', 'DNI', 'SEXO', 'SUPERVISOR_EMAIL', 'FECHA_INGRESO', 'FECHA_CAP_SST', 'CARNET_SALUD', 'CODIGO_CFR', 'ACTIVO']);
-    hoja('TIENDAS', S.db.tiendas.map((t) => ({ CADENA: t.cadena, TIENDA: t.tienda, NOMBRE_CARTA: t.nombre_carta || '', GERENTE: t.gerente || '', ACTIVA: t.activa === false ? 'NO' : 'SI' })),
-      ['CADENA', 'TIENDA', 'NOMBRE_CARTA', 'GERENTE', 'ACTIVA']);
-    hoja('RUTA', S.db.ruta.map((r) => { const m = mNom(r.mercaderista_id), t = tiendaPorId(r.tienda_id) || {}; return { DNI: m.dni, MERCADERISTA: m.nombres ? nombreLista(m) : '', CADENA: t.cadena, TIENDA: t.tienda }; }),
-      ['DNI', 'MERCADERISTA', 'CADENA', 'TIENDA']);
-    hoja('APOYOS', S.db.apoyos.map((a) => { const m = mNom(a.mercaderista_id), t = tiendaPorId(a.tienda_id) || {}; return { DNI: m.dni, MERCADERISTA: m.nombres ? nombreLista(m) : '', CADENA: t.cadena, TIENDA: t.tienda, DESDE: P.fCorta(a.desde), HASTA: P.fCorta(a.hasta), NOTA: a.nota || '' }; }),
-      ['DNI', 'MERCADERISTA', 'CADENA', 'TIENDA', 'DESDE', 'HASTA', 'NOTA']);
-    hoja('USUARIOS', S.db.usuarios.map((u) => ({ EMAIL: u.email, NOMBRE: u.nombre || '', CELULAR: u.celular || '', ROL: u.rol })), ['EMAIL', 'NOMBRE', 'CELULAR', 'ROL']);
-    const c = cfg();
-    hoja('CONFIG', CONFIG_CAMPOS.map(([k, etq]) => ({ CLAVE: k, VALOR: c[k] || '', DESCRIPCION: etq })), ['CLAVE', 'VALOR', 'DESCRIPCION']);
+    const X = window.XLSX;
+    const filas = d.filas();
+    const ws = X.utils.aoa_to_sheet([d.cols].concat(filas));
+    ws['!cols'] = d.cols.map((c, j) => ({ wch: Math.min(48, Math.max(c.length, ...filas.slice(0, 300).map((f) => String(f[j] || '').length)) + 2) }));
+    ws['!autofilter'] = { ref: ws['!ref'] };
+    const wb = X.utils.book_new();
+    X.utils.book_append_sheet(wb, ws, d.titulo.toUpperCase());
     const out = X.write(wb, { bookType: 'xlsx', type: 'array' });
-    descargarBlob(new Blob([out], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' }), `Base cartas mercaderistas ${iso(new Date())}.xlsx`);
+    const extra = d.porSupervisor ? ` - ${nombreFiltro()}` : '';
+    descargarBlob(new Blob([out], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' }), limpiarArchivo(`${d.titulo}${extra} ${iso(new Date())}`) + '.xlsx');
   }, 'Preparando Excel…');
 
-  CAMBIOS.importar = (el) => {
+  CAMBIOS['xls-subir'] = (el) => {
     const file = el.files[0]; if (!file) return;
     el.value = '';
+    const d = EXCEL[el.dataset.e];
     conManejo(async () => {
       await cargarScript(LIBS.xlsx);
       const X = window.XLSX;
       const wb = X.read(await file.arrayBuffer(), { type: 'array' });
-      const leer = (n) => (wb.Sheets[n] ? X.utils.sheet_to_json(wb.Sheets[n], { defval: '', raw: true }) : null);
-      const up = (o) => { const r = {}; Object.keys(o).forEach((k) => { r[norm(k).toUpperCase().replace(/\s+/g, '_')] = o[k]; }); return r; };
-      const res = [];
-
-      const usuarios = leer('USUARIOS');
-      if (usuarios) {
-        const filas = usuarios.map(up).filter((r) => txt(r.EMAIL)).map((r) => ({ email: txt(r.EMAIL).toLowerCase(), nombre: txt(r.NOMBRE) || null, celular: txt(r.CELULAR) || null, rol: /admin/i.test(txt(r.ROL)) ? 'admin' : 'supervisor' }));
-        ocupado('Importando usuarios…'); await api.upsert('usuarios', filas, 'email'); res.push(`${filas.length} usuarios`);
-      }
-      const tiendas = leer('TIENDAS');
-      if (tiendas) {
-        const filas = tiendas.map(up).filter((r) => txt(r.CADENA) && txt(r.TIENDA)).map((r) => ({ cadena: txt(r.CADENA).toUpperCase(), tienda: txt(r.TIENDA), nombre_carta: txt(r.NOMBRE_CARTA).toUpperCase() || null, gerente: txt(r.GERENTE) || null, activa: siNo(r.ACTIVA) }));
-        ocupado('Importando tiendas…'); await api.upsert('tiendas', filas, 'cadena,tienda'); res.push(`${filas.length} tiendas`);
-      }
-      const mercs = leer('MERCADERISTAS');
-      const sinSup = new Set();
-      if (mercs) {
-        const emails = new Set(S.db.usuarios.map((u) => u.email.toLowerCase()));
-        const filas = mercs.map(up).filter((r) => txt(r.DNI) && txt(r.NOMBRES)).map((r) => {
-          let sup = txt(r.SUPERVISOR_EMAIL).toLowerCase() || null;
-          if (sup && !emails.has(sup)) { sinSup.add(sup); sup = null; }
-          const dni = txt(r.DNI);
-          return { nombres: txt(r.NOMBRES), apellidos: txt(r.APELLIDOS), dni: /^\d{1,7}$/.test(dni) ? dni.padStart(8, '0') : dni, sexo: /^m/i.test(txt(r.SEXO)) ? 'M' : 'F', supervisor_email: sup, fecha_ingreso: fechaExcel(r.FECHA_INGRESO), fecha_cap_sst: fechaExcel(r.FECHA_CAP_SST), carnet_salud: txt(r.CARNET_SALUD) || null, codigo_cfr: txt(r.CODIGO_CFR) || null, activo: siNo(r.ACTIVO) };
-        });
-        ocupado('Importando mercaderistas…'); await api.upsert('mercaderistas', filas, 'dni'); res.push(`${filas.length} mercaderistas`);
-      }
+      const hoja = wb.SheetNames.find((n) => norm(n) === norm(d.titulo)) || wb.SheetNames[0];
+      const aoa = X.utils.sheet_to_json(wb.Sheets[hoja], { header: 1, defval: '', raw: true });
+      const cab = (aoa[0] || []).map((c) => norm(c).toUpperCase().replace(/\s+/g, '_'));
+      const falta = d.requeridas.filter((c) => !cab.includes(c));
+      if (falta.length) throw new Error(`Al Excel le faltan las columnas: ${falta.join(', ')}. Descarga la base de esta pestaña para ver el formato.`);
+      const filas = aoa.slice(1).filter((r) => r.some((v) => txt(v))).map((r) => { const o = {}; cab.forEach((c, j) => { if (c) o[c] = r[j]; }); return o; });
+      if (!filas.length) throw new Error('El Excel no tiene filas para cargar.');
+      const res = await d.importar(filas, new Set(cab));
+      ocupado('Actualizando datos…');
       if (!S.demo) await cargarTodo();
-      const buscaT = (cad, tie) => S.db.tiendas.find((t) => t.cadena === txt(cad).toUpperCase() && norm(t.tienda) === norm(tie));
-      const buscaM = (dni) => { const d = txt(dni); return S.db.mercaderistas.find((m) => m.dni === d || m.dni === d.padStart(8, '0')); };
-      const noEncontradas = [];
-      const ruta = leer('RUTA');
-      if (ruta) {
-        const porM = new Map();
-        ruta.map(up).forEach((r) => {
-          const m = buscaM(r.DNI), t = buscaT(r.CADENA, r.TIENDA);
-          if (!m || !t) { if (txt(r.DNI)) noEncontradas.push(`${txt(r.DNI)} ${txt(r.CADENA)} ${txt(r.TIENDA)}`); return; }
-          if (!porM.has(m.id)) porM.set(m.id, new Set());
-          porM.get(m.id).add(t.id);
-        });
-        ocupado('Importando ruta…');
-        for (const [mid, set] of porM) {
-          await api.borrar('ruta', { mercaderista_id: mid });
-          await api.insertar('ruta', [...set].map((tid) => ({ mercaderista_id: mid, tienda_id: tid })));
-        }
-        res.push(`ruta de ${porM.size} mercaderistas`);
-      }
-      const apoyos = leer('APOYOS');
-      if (apoyos) {
-        const filas = [];
-        apoyos.map(up).forEach((r) => {
-          const m = buscaM(r.DNI), t = buscaT(r.CADENA, r.TIENDA), d = fechaExcel(r.DESDE), hs = fechaExcel(r.HASTA);
-          if (!m || !t || !d || !hs) return;
-          if (S.db.apoyos.some((a) => a.mercaderista_id === m.id && a.tienda_id === t.id && a.desde === d && a.hasta === hs)) return;
-          filas.push({ mercaderista_id: m.id, tienda_id: t.id, desde: d, hasta: hs, nota: txt(r.NOTA) || null });
-        });
-        if (filas.length) { ocupado('Importando apoyos…'); await api.insertar('apoyos', filas); }
-        res.push(`${filas.length} apoyos nuevos`);
-      }
-      const conf = leer('CONFIG');
-      if (conf) {
-        const obj = {};
-        conf.map(up).forEach((r) => { const k = txt(r.CLAVE).toUpperCase(); if (k && k !== 'FIRMA' && CONFIG_CAMPOS.some((x) => x[0] === k)) obj[k] = txt(r.VALOR); });
-        if (Object.keys(obj).length) { ocupado('Importando configuración…'); await api.guardarConfig(obj); res.push('configuración'); }
-      }
       render();
-      let msg = 'Importado: ' + (res.join(', ') || 'nada (no se encontraron hojas conocidas)') + '.';
-      if (sinSup.size) msg += ` Supervisores no registrados (quedaron sin supervisor): ${[...sinSup].join(', ')}.`;
-      if (noEncontradas.length) msg += ` Filas de RUTA no encontradas: ${noEncontradas.slice(0, 5).join('; ')}${noEncontradas.length > 5 ? '…' : ''}`;
-      toast(msg, !!(sinSup.size || noEncontradas.length));
+      abrirModal(`${cabModal('Resultado de la carga · ' + d.titulo)}<div class="modal-cuerpo"><p class="${res.alerta ? 'faltan' : ''}" style="white-space:pre-line">${h(res.texto.replace(/\. /g, '.\n'))}</p></div>
+        <div class="modal-pie"><button class="btn primario" data-a="cerrar-modal">Listo</button></div>`);
     }, 'Leyendo Excel…');
   };
 
+
   // ---------- Arranque ----------
-  window.__cartasApp = { S, cartasSeleccionadas, pdfDe };
+  ACCIONES['ayuda-pdf'] = () => conManejo(async () => { await asegurarPDF(); await window.Ayuda.descargarPDF(); }, 'Preparando instructivo…');
+  window.__cartasApp = { S, cartasSeleccionadas, pdfDe, asegurarPDF };
   iniciar().catch((e) => { console.error(e); mostrarLogin(errorAmigable(e)); });
 })();

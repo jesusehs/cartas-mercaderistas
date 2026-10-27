@@ -104,7 +104,7 @@
     if (/supervisor_email_fkey/.test(m)) return 'El supervisor indicado no está registrado en Usuarios.';
     if (/Invalid login credentials/i.test(m)) return 'Correo o contraseña incorrectos.';
     if (/row-level security/i.test(m)) return 'No tienes permiso para hacer esto.';
-    if (/Failed to fetch|NetworkError/i.test(m)) return 'Sin conexión. Revisa tu internet e intenta de nuevo.';
+    if (/Failed to fetch|NetworkError/i.test(m)) return 'No se pudo conectar con la base de datos. Revisa tu internet; si sigue igual, la base puede estar pausada (avisa al administrador).';
     return m;
   }
   async function conManejo(fn, msg) {

@@ -167,3 +167,16 @@ begin
 end $$;
 revoke all on function public.crear_acceso(text, text) from public, anon;
 grant execute on function public.crear_acceso(text, text) to authenticated;
+
+-- ============================================================
+--  v3: "ping" para mantener activo el proyecto (plan gratis)
+-- ============================================================
+-- El flujo de GitHub .github/workflows/mantener-activo.yml lo llama cada 2 días.
+-- Solo devuelve 'ok' y la cantidad de filas de config (no expone datos).
+create or replace function public.ping()
+returns text language sql stable security definer
+set search_path = public as $$
+  select 'ok ' || (select count(*) from public.config)::text
+$$;
+revoke all on function public.ping() from public;
+grant execute on function public.ping() to anon, authenticated;

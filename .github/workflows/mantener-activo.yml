@@ -1,11 +1,12 @@
 # Supabase (plan gratis) pausa el proyecto tras 7 días sin uso.
-# Este flujo llama a la función ping() de la base cada 2 días para mantenerlo activo,
+# Supabase pide "unas cuantas consultas a la base cada día", así que este flujo
+# llama a la función ping() de la base cada 3 horas (8 veces al día),
 # y una vez al mes deja un commit para que GitHub no apague el flujo.
 # Si la base no responde 200, el flujo falla y GitHub avisa por correo.
 name: Mantener Supabase activo
 on:
   schedule:
-    - cron: '17 13 */2 * *'
+    - cron: '17 */3 * * *'
   workflow_dispatch:
 permissions:
   contents: write
